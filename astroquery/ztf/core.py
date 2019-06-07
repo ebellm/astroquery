@@ -3,7 +3,9 @@ from __future__ import print_function
 
 # put all imports organized as shown below
 # 1. standard library imports
-
+import six
+from six import BytesIO
+from six.moves import urllib
 from numbers import Number
 
 # 2. third party imports
@@ -24,8 +26,8 @@ from ..utils import commons
 from ..utils import prepend_docstr_nosections
 # async_to_sync generates the relevant query tools from _async methods
 from ..utils import async_to_sync
-# parse votables
 from ..vo_conesearch.vos_catalog import vo_tab_parse
+
 # import configurable items declared in __init__.py
 from . import conf
 
@@ -109,6 +111,26 @@ class ZtfClass(BaseQuery):
                 'FORMAT': 'VOTABLE'
                 }
         return request_payload
+
+    def _parse_result(self, response, pars={}, verbose=False):
+        """
+        Parse the raw HTTP response and return it as a table.
+        """
+        # Suppress any VOTable related warnings.
+        if not verbose:
+            commons.suppress_vo_warnings()
+
+        query = []
+        for key, value in six.iteritems(pars):
+            query.append('{0}={1}'.format(urllib.parse.quote(key),
+                                          urllib.parse.quote_plus(str(value))))
+        parsed_url = self.URL + '&'.join(query)
+
+        # Parse the result
+        tab = table.parse(BytesIO(response.content), filename=parsed_url,
+                          pedantic=self.PEDANTIC)
+        return vo_tab_parse(tab, self.URL, pars)
+
 
     # Image queries do not use the async_to_sync approach: the "synchronous"
     # version must be defined explicitly.  The example below therefore presents
@@ -251,7 +273,7 @@ def _validate_sr(radius):
     else:
         sr = commons.radius_to_unit(radius)
 
-    if sr > 0.1667*u.degree:
+    if sr > 0.1667:
         raise ValueError('Radius must be less than 0.1667 degrees.')
 
     return sr
